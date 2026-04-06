@@ -147,7 +147,7 @@ Ao permitir que o Jogador 2 ignore a primeira cobra, observou-se alteração nas
 ```bash
 git clone https://github.com/ThaynanRodrigues/Snakes-Ladders.git
 cd Snakes-Ladders
-
+```
 2. Abra o projeto no RStudio
 
 3. Renderize a apresentação:
