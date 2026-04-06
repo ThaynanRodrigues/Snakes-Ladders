@@ -142,12 +142,11 @@ Ao permitir que o Jogador 2 ignore a primeira cobra, observou-se alteração nas
 
 ## Como Executar
 
-1. Clone o repositório:
+1. Clone o repositório disponível no [GitHub](https://github.com/ThaynanRodrigues/Snakes-Ladders):
 
 ```bash
-git clone (https://github.com/ThaynanRodrigues/Snakes-Ladders/blob/main/slides.qmd)
-cd snakes-ladders
-```
+git clone https://github.com/ThaynanRodrigues/Snakes-Ladders.git
+cd Snakes-Ladders
 
 2. Abra o projeto no RStudio
 
