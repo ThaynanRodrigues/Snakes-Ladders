@@ -179,4 +179,4 @@ Thaynan Rodrigues
 ## Contato
 
 * [LinkedIn](https://www.linkedin.com/in/thaynanrodrigues/)
-* [GitHub](https://github.com/https://github.com/ThaynanRodrigues)
+* [GitHub](github.com/ThaynanRodrigues)
