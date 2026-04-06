@@ -145,7 +145,7 @@ Ao permitir que o Jogador 2 ignore a primeira cobra, observou-se alteração nas
 1. Clone o repositório:
 
 ```bash
-git clone <URL_DO_REPOSITORIO>
+git clone (https://github.com/ThaynanRodrigues/Snakes-Ladders/blob/main/slides.qmd)
 cd snakes-ladders
 ```
 
