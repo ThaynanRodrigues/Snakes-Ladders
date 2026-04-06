@@ -1,0 +1,1200 @@
+---
+title: "Snakes and Ladders — Teste lógico"
+author: "Thaynan Rodrigues"
+format:
+  revealjs:
+    theme: simple
+    slide-number: true
+    transition: fade
+    code-fold: true
+    code-tools: true
+    toc: true
+    toc-title: "Sumário"
+    toc-depth: 2
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r, include=FALSE}
+source("R/board.R")
+b <- make_board()
+source("R/simulate.R")
+set.seed(123)
+```
+
+```{r, include=FALSE, cache=FALSE}
+library(dplyr)
+library(tibble)
+library(ggplot2)
+library(purrr)
+library(scales)
+
+set.seed(123)
+
+# 10.000 jogos - cenário base (Player 1 começa; ambos iniciam na casa 1)
+res <- simulate_many_games(
+  n = 10000,
+  board_obj = b,
+  final_square = 36,
+  start_p1 = 1,
+  start_p2 = 1
+)
+
+# checagens rápidas (evitam resultados silenciosamente errados)
+stopifnot(nrow(res) == 10000)
+stopifnot(all(res$rolls > 0))
+
+```
+
+# Contexto e objetivo
+
+-   Jogo *Snakes and Ladders* (Cobras e Escadas)
+-   Interesse: entender as **chances de vitória**
+-   Abordagem: **simulação de Monte Carlo**
+-   Foco: **processo analítico e decisões de modelagem**
+
+------------------------------------------------------------------------
+
+### Regras do jogo
+
+-   2 jogadores, turnos alternados
+-   Dado justo (1 a 6)
+-   Escadas: sobem o jogador
+-   Cobras: descem o jogador
+-   Vitória: chegar **ou ultrapassar** a última casa
+
+------------------------------------------------------------------------
+
+## Por que simulação?
+
+-   Solução analítica exata é complexa
+-   Muitas regras e estados possíveis
+-   Simulação permite:
+    -   flexibilidade
+    -   testes de cenários
+    -   estimativas com incerteza
+
+------------------------------------------------------------------------
+
+### Representação do tabuleiro
+
+-   Tabuleiro modelado como:
+    -   **mapeamento casa → casa destino**
+-   Casas “normais” permanecem iguais
+-   Cobras e escadas redirecionam o jogador
+-   Simplifica a lógica do jogo
+
+------------------------------------------------------------------------
+
+### Tabuleiro — Snakes & Ladders
+
+![](figs/tabuleiro.png){width="60%"}
+
+```{r, include=FALSE}
+source("R/board.R")
+b <- make_board()
+
+source("R/simulate.R")
+```
+
+```{r, include=FALSE}
+source("R/board.R")
+b <- make_board()
+
+stopifnot(apply_board(3,  b$board)  == 16)
+stopifnot(apply_board(5,  b$board)  == 7)
+stopifnot(apply_board(15, b$board)  == 25)
+stopifnot(apply_board(18, b$board)  == 20)
+stopifnot(apply_board(21, b$board)  == 32)
+
+stopifnot(apply_board(12, b$board)  == 2)
+stopifnot(apply_board(14, b$board)  == 11)
+stopifnot(apply_board(17, b$board)  == 4)
+stopifnot(apply_board(31, b$board)  == 19)
+stopifnot(apply_board(35, b$board)  == 22)
+```
+
+------------------------------------------------------------------------
+
+### Resumo das transições
+
+```{r, echo=FALSE}
+library(dplyr)
+library(tibble)
+library(knitr)
+library(kableExtra)
+
+transicoes <- tibble(
+  tipo = c(
+    rep("Escada", length(b$ladders)),
+    rep("Cobra",  length(b$snakes))
+  ),
+  de   = as.integer(c(names(b$ladders), names(b$snakes))),
+  para = as.integer(c(unname(b$ladders), unname(b$snakes)))
+) |>
+  arrange(tipo, de) |>
+  rename(
+    `Tipo de transição` = tipo,
+    `Casa inicial` = de,
+    `Casa destino` = para
+  )
+
+knitr::kable(
+  transicoes,
+  caption = "Resumo das transições do tabuleiro (Cobras e Escadas)",
+  align = c("c", "c", "c")
+) |>
+  kableExtra::kable_styling(
+    font_size = 24,
+    full_width = FALSE,
+    position = "center"
+  ) |>
+  kableExtra::column_spec(1, width = "6em") |>
+  kableExtra::column_spec(2, width = "5em") |>
+  kableExtra::column_spec(3, width = "5em")
+```
+
+------------------------------------------------------------------------
+
+### Estrutura da simulação
+
+-   Simular **1 jogo completo** por vez
+-   Estado do jogo:
+    -   posição dos jogadores
+    -   turno atual
+    -   número de rolagens
+-   Registrar eventos:
+    -   vencedor
+    -   cobras acionadas
+    -   escadas acionadas
+
+------------------------------------------------------------------------
+
+## Estratégia computacional
+
+-   Repetir o jogo **10.000 vezes**
+-   Cada repetição é independente
+-   Agregar resultados para obter:
+    -   probabilidades
+    -   médias
+    -   distribuições
+
+# Validações (testes)
+
+-   Distribuição do dado é uniforme?
+-   Cobras/escadas aplicadas após o movimento?
+-   Alternância correta de turnos?
+-   Tratamento correto dos casos de borda?
+
+------------------------------------------------------------------------
+
+## Distribuição do dado
+
+```{r, echo=FALSE}
+library(dplyr)
+library(tibble)
+library(knitr)
+library(kableExtra)
+library(scales)
+
+source("R/simulate.R")
+
+set.seed(123)
+
+rolls <- replicate(6000, roll_die())
+
+df_dado <- tibble(face = 1:6) |>
+  left_join(
+    tibble(face = rolls) |>
+      count(face, name = "Frequência"),
+    by = "face"
+  ) |>
+  mutate(
+    Frequência = ifelse(is.na(Frequência), 0L, Frequência),
+    Proporção = Frequência / sum(Frequência),
+    Porcentagem = percent(Proporção, accuracy = 0.1)
+  ) |>
+  select(
+    `Face do dado` = face,
+    Frequência,
+    Porcentagem
+  )
+
+knitr::kable(
+  df_dado,
+  caption = "Distribuição do dado (6.000 lançamentos)",
+  align = c("c", "c", "c")
+) |>
+  kableExtra::kable_styling(
+    font_size = 24,
+    full_width = FALSE,
+    position = "center"
+  ) |>
+  kableExtra::column_spec(1, width = "4.5em") |>
+  kableExtra::column_spec(2, width = "5.5em") |>
+  kableExtra::column_spec(3, width = "6.5em")
+```
+
+------------------------------------------------------------------------
+
+### Gráfico do dado
+
+```{r, echo=FALSE}
+library(ggplot2)
+library(dplyr)
+library(scales)
+
+df <- as.data.frame(table(rolls))
+colnames(df) <- c("face", "freq")
+df$face <- as.integer(as.character(df$face))
+
+df <- df |>
+  mutate(
+    prob = freq / sum(freq),
+    label = percent(prob, accuracy = 0.1)
+  )
+
+expected <- mean(df$freq)
+
+ggplot(df, aes(x = factor(face), y = freq)) +
+  geom_col(fill = "#2C7FB8", width = 0.7) +
+  geom_text(
+    aes(label = label),
+    color = "white",
+    fontface = "bold",
+    size = 4,
+    vjust = 15.0
+  ) +
+  geom_hline(
+    yintercept = expected,
+    linetype = "dashed",
+    color = "#D95F02",
+    linewidth = 0.8
+  ) +
+  labs(
+    title = "Sanity check — distribuição do dado",
+    subtitle = "Probabilidade observada por face (esperado: distribuição uniforme)",
+    x = "Face do dado",
+    y = "Frequência"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(color = "gray40"),
+    panel.grid.minor = element_blank()
+  )
+
+```
+
+------------------------------------------------------------------------
+
+### Cobras & Escadas após o movimento
+
+```{r, echo=FALSE}
+# ============================
+# Sanity check — move_player()
+# ============================
+
+# ---- Escadas (todas) ----
+out_l1 <- move_player(pos = 1,  die = 2, board_obj = b, final_square = 36)  # 1+2=3  -> 16
+stopifnot(out_l1$pos == 16, out_l1$ladders_hit == 1, out_l1$snakes_hit == 0)
+
+out_l2 <- move_player(pos = 3,  die = 2, board_obj = b, final_square = 36)  # 3+2=5  -> 7
+stopifnot(out_l2$pos == 7,  out_l2$ladders_hit == 1, out_l2$snakes_hit == 0)
+
+out_l3 <- move_player(pos = 10, die = 5, board_obj = b, final_square = 36)  # 10+5=15 -> 25
+stopifnot(out_l3$pos == 25, out_l3$ladders_hit == 1, out_l3$snakes_hit == 0)
+
+out_l4 <- move_player(pos = 16, die = 2, board_obj = b, final_square = 36)  # 16+2=18 -> 20
+stopifnot(out_l4$pos == 20, out_l4$ladders_hit == 1, out_l4$snakes_hit == 0)
+
+out_l5 <- move_player(pos = 19, die = 2, board_obj = b, final_square = 36)  # 19+2=21 -> 32
+stopifnot(out_l5$pos == 32, out_l5$ladders_hit == 1, out_l5$snakes_hit == 0)
+
+# ---- Cobras (todas) ----
+out_s1 <- move_player(pos = 10, die = 2, board_obj = b, final_square = 36)  # 10+2=12 -> 2
+stopifnot(out_s1$pos == 2,  out_s1$snakes_hit == 1, out_s1$ladders_hit == 0)
+
+out_s2 <- move_player(pos = 8,  die = 6, board_obj = b, final_square = 36)  # 8+6=14  -> 11
+stopifnot(out_s2$pos == 11, out_s2$snakes_hit == 1, out_s2$ladders_hit == 0)
+
+out_s3 <- move_player(pos = 11, die = 6, board_obj = b, final_square = 36)  # 11+6=17 -> 4
+stopifnot(out_s3$pos == 4,  out_s3$snakes_hit == 1, out_s3$ladders_hit == 0)
+
+out_s4 <- move_player(pos = 25, die = 6, board_obj = b, final_square = 36)  # 25+6=31 -> 19
+stopifnot(out_s4$pos == 19, out_s4$snakes_hit == 1, out_s4$ladders_hit == 0)
+
+out_s5 <- move_player(pos = 29, die = 6, board_obj = b, final_square = 36)  # 29+6=35 -> 22
+stopifnot(out_s5$pos == 22, out_s5$snakes_hit == 1, out_s5$ladders_hit == 0)
+
+# ---- Casos normais (sem transição) ----
+out_n1 <- move_player(pos = 1, die = 1, board_obj = b, final_square = 36)  # 1+1=2
+stopifnot(out_n1$pos == 2, out_n1$snakes_hit == 0, out_n1$ladders_hit == 0)
+
+out_n2 <- move_player(pos = 6, die = 1, board_obj = b, final_square = 36)  # 6+1=7 (7 é normal)
+stopifnot(out_n2$pos == 7, out_n2$snakes_hit == 0, out_n2$ladders_hit == 0)
+
+# ---- Caso de borda: vitória (>= 36) ----
+out_w1 <- move_player(pos = 34, die = 2, board_obj = b, final_square = 36)  # 34+2=36
+stopifnot(out_w1$pos >= 36)
+stopifnot(out_w1$snakes_hit == 0, out_w1$ladders_hit == 0)
+
+out_w2 <- move_player(pos = 34, die = 6, board_obj = b, final_square = 36)  # 34+6=40
+stopifnot(out_w2$pos >= 36)
+stopifnot(out_w2$snakes_hit == 0, out_w2$ladders_hit == 0)
+
+```
+
+```{r, echo=FALSE}
+library(dplyr)
+library(tibble)
+library(purrr)
+library(knitr)
+library(kableExtra)
+
+# -----------------------------
+# Casos de teste (entrada)
+# -----------------------------
+casos <- tibble(
+  caso = c(
+    "Escada 3→16", "Escada 5→7", "Escada 15→25", "Escada 18→20", "Escada 21→32",
+    "Cobra 12→2", "Cobra 14→11", "Cobra 17→4", "Cobra 31→19", "Cobra 35→22",
+    "Normal 2", "Normal 7",
+    "Borda =36", "Borda >36"
+  ),
+  pos_inicial = c(1, 3, 10, 16, 19, 10, 8, 11, 25, 29, 1, 6, 34, 34),
+  dado        = c(2, 2, 5, 2, 2, 2, 6, 6, 6, 6, 1, 1, 2, 6),
+  pos_esperada = c(16, 7, 25, 20, 32, 2, 11, 4, 19, 22, 2, 7, 36, 40),
+  evento_esperado = c(
+    "Escada", "Escada", "Escada", "Escada", "Escada",
+    "Cobra", "Cobra", "Cobra", "Cobra", "Cobra",
+    "Normal", "Normal",
+    "Borda", "Borda"
+  )
+)
+
+# -----------------------------
+# Resultados "crus" (para gráficos / validações)
+# -----------------------------
+resultados_raw <- casos |>
+  mutate(
+    out = purrr::pmap(
+      list(pos_inicial, dado),
+      ~ move_player(pos = ..1, die = ..2, board_obj = b, final_square = 36)
+    ),
+    pos_obtida  = purrr::map_dbl(out, "pos"),
+    ladders_hit = purrr::map_int(out, "ladders_hit"),
+    snakes_hit  = purrr::map_int(out, "snakes_hit"),
+    evento_obtido = case_when(
+      pos_obtida >= 36 ~ "Borda",
+      ladders_hit == 1 ~ "Escada",
+      snakes_hit  == 1 ~ "Cobra",
+      TRUE             ~ "Normal"
+    ),
+    status = if_else(
+      (evento_esperado == "Borda" & pos_obtida >= 36) |
+        (evento_esperado != "Borda" &
+           pos_obtida == pos_esperada &
+           evento_obtido == evento_esperado),
+      "OK",
+      "ERRO"
+    )
+  ) |>
+  select(
+    caso, pos_inicial, dado,
+    pos_esperada, pos_obtida,
+    evento_esperado, evento_obtido,
+    ladders_hit, snakes_hit,
+    status
+  )
+
+## Compatibilidade
+resultados <- resultados_raw
+
+
+# -----------------------------
+resultados_tbl <- resultados_raw |>
+  transmute(
+    Caso = caso,
+    `Pos. inicial` = pos_inicial,
+    Dado = dado,
+    `Pos. esperada` = pos_esperada,
+    `Pos. obtida` = pos_obtida,
+    `Evento (esp.)` = evento_esperado,
+    `Evento (obt.)` = evento_obtido
+  )
+
+knitr::kable(
+  resultados_tbl,
+  caption = "Validação — cobras/escadas aplicadas após o movimento (casos de teste)",
+  align = c("l","c","c","c","c","c","c")
+) |>
+  kableExtra::kable_styling(
+    font_size = 18,
+    full_width = FALSE,
+    position = "center"
+  ) |>
+  kableExtra::column_spec(1, width = "10em") |>
+  kableExtra::column_spec(6, width = "7em") |>
+  kableExtra::column_spec(7, width = "7em")
+```
+
+------------------------------------------------------------------------
+
+### Gráfico Cobras & Escadas
+
+```{r, echo=FALSE}
+library(ggplot2)
+library(dplyr)
+
+ggplot(resultados, aes(x = caso)) +
+  geom_point(
+    aes(y = pos_esperada, color = "Esperado"),
+    size = 4
+  ) +
+  geom_point(
+    aes(y = pos_obtida, color = "Obtido"),
+    size = 4,
+    shape = 17
+  ) +
+  scale_color_manual(
+    values = c("Esperado" = "#D95F02", "Obtido" = "#1B9E77")
+  ) +
+  labs(
+    title = "Validação — aplicação de cobras e escadas",
+    subtitle = "Comparação entre posição esperada e posição obtida",
+    x = NULL,
+    y = "Posição final no tabuleiro",
+    color = ""
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+
+```
+
+------------------------------------------------------------------------
+
+## Alternância correta de turnos
+
+```{r, echo=FALSE}
+library(dplyr)
+library(tibble)
+library(knitr)
+library(kableExtra)
+
+set.seed(202)
+tr <- simulate_turn_trace(board_obj = b, n_turns = 10)
+
+# ----------------------------
+# Validação: alternância correta p1, p2, p1, p2...
+# ----------------------------
+expected <- rep(c("p1", "p2"), length.out = nrow(tr))
+stopifnot(all(tr$jogador == expected))
+
+# ----------------------------
+# Tabela "apresentável" para o slide
+# ----------------------------
+tr_tab <- tr |>
+  mutate(
+    Jogador = if_else(jogador == "p1", "Jogador 1", "Jogador 2"),
+    `Posição após` = as.integer(posicao_apos)
+  ) |>
+  select(
+    `Turno` = turno,
+    Jogador,
+    `Dado` = dado,
+    `Posição após`
+  )
+
+knitr::kable(
+  tr_tab,
+  caption = "Validação — alternância correta de turnos (amostra de 10 turnos)",
+  align = c("c", "l", "c", "c")
+) |>
+  kableExtra::kable_styling(
+    font_size = 24,
+    full_width = FALSE,
+    position = "center"
+  ) |>
+  kableExtra::column_spec(1, width = "4em") |>
+  kableExtra::column_spec(2, width = "8em") |>
+  kableExtra::column_spec(3, width = "4em") |>
+  kableExtra::column_spec(4, width = "6em")
+```
+
+------------------------------------------------------------------------
+
+### Gráfico zig-zag da alternância
+
+```{r, echo=FALSE}
+library(dplyr)
+library(ggplot2)
+
+set.seed(202)
+tr <- simulate_turn_trace(board_obj = b, n_turns = 30)
+
+tr_plot <- tr |>
+  mutate(jogador_num = if_else(jogador == "p1", 1L, 2L))
+
+# validação determinística (continua importante)
+expected <- rep(c("p1", "p2"), length.out = nrow(tr))
+stopifnot(all(tr$jogador == expected))
+
+ggplot(tr_plot, aes(x = turno, y = jogador_num)) +
+  geom_step(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_y_continuous(
+    breaks = c(1, 2),
+    labels = c("p1", "p2")
+  ) +
+  labs(
+    title = "Validação — alternância de turnos",
+    subtitle = "Padrão esperado: p1 → p2 → p1 → p2 (zig-zag perfeito)",
+    x = "Turno",
+    y = "Jogador"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+```
+
+------------------------------------------------------------------------
+
+## Tratamentos de casos de borda
+
+### Vitória ao atingir ou ultrapassar a última casa
+
+```{r}
+# Exato: 34 + 2 = 36
+mv1 <- move_player(pos = 34, die = 2, board_obj = b, final_square = 36)
+stopifnot(mv1$pos >= 36)
+stopifnot(mv1$snakes_hit == 0, mv1$ladders_hit == 0)
+
+# Ultrapassa: 35 + 6 = 41
+mv2 <- move_player(pos = 35, die = 6, board_obj = b, final_square = 36)
+stopifnot(mv2$pos >= 36)
+stopifnot(mv2$snakes_hit == 0, mv2$ladders_hit == 0)
+
+"OK: condição de vitória (>= 36) tratada corretamente."
+```
+
+### Posição inválida (NA, infinita ou negativa)
+
+```{r}
+
+erro <- try(
+  simulate_one_game(board_obj = b, final_square = 36, start_p1 = NA),
+  silent = TRUE
+)
+
+stopifnot(inherits(erro, "try-error"))
+
+"OK: possíveis posições inválidas tratadas corretamente"
+```
+
+### Loop infinito na simulação
+
+```{r}
+set.seed(999)
+tmp_loop <- simulate_many_games(200, board_obj = b, final_square = 36)
+
+stopifnot(max(tmp_loop$rolls) < 500)
+"OK: limite máximo de turnos e loop infinito tratado corretamente"
+```
+
+# Número médio de jogadas
+
+```{r, echo=FALSE}
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+resumo_jogadas_slide <- res |>
+  summarise(
+    `Jogos simulados` = n(),
+    `Média de jogadas` = mean(rolls),
+    `Mediana` = median(rolls),
+    `1º Quartil (Q1)` = quantile(rolls, 0.25),
+    `3º Quartil (Q3)` = quantile(rolls, 0.75)
+  ) |>
+  mutate(
+    across(
+      where(is.numeric),
+      ~ round(.x, 2)
+    )
+  )
+
+knitr::kable(
+  resumo_jogadas_slide,
+  caption = "Resumo estatístico do número de jogadas até o fim do jogo",
+  align = c("c", "c", "c", "c", "c")
+) |>
+  kableExtra::kable_styling(
+    font_size = 28,
+    full_width = FALSE,
+    position = "center"
+  ) |>
+  kableExtra::column_spec(1, width = "7em") |>
+  kableExtra::column_spec(2, width = "8em") |>
+  kableExtra::column_spec(3, width = "6em") |>
+  kableExtra::column_spec(4, width = "8em") |>
+  kableExtra::column_spec(5, width = "8em")
+```
+
+# Questões
+
+------------------------------------------------------------------------
+
+### Q1: Quem começa tem vantagem?
+
+```{r, echo=FALSE}
+library(dplyr)
+library(tibble)
+library(scales)
+library(knitr)
+library(kableExtra)
+
+n <- nrow(res)
+
+df_prob <- tibble(winner = as.character(res$winner)) |>
+  count(winner, name = "vitorias") |>
+  right_join(tibble(winner = c("p1", "p2")), by = "winner") |>
+  mutate(
+    vitorias = tidyr::replace_na(vitorias, 0L),
+    prob = vitorias / n,
+    se = sqrt(prob * (1 - prob) / n),
+    ic_low = pmax(0, prob - 1.96 * se),
+    ic_high = pmin(1, prob + 1.96 * se),
+    Jogador = if_else(winner == "p1", "Jogador 1", "Jogador 2"),
+    `Probabilidade` = percent(prob, accuracy = 0.1),
+    `IC 95%` = paste0(
+      percent(ic_low, accuracy = 0.1),
+      " – ",
+      percent(ic_high, accuracy = 0.1)
+    )
+  ) |>
+  select(
+    Jogador,
+    `Vitórias` = vitorias,
+    `Probabilidade`,
+    `IC 95%`
+  )
+
+knitr::kable(
+  df_prob,
+  caption = "Probabilidade de vitória por jogador",
+  align = c("l", "c", "c", "c")
+) |>
+  kableExtra::kable_styling(
+    font_size = 26,
+    full_width = FALSE,
+    position = "center"
+  ) |>
+  kableExtra::column_spec(1, width = "6em") |>
+  kableExtra::column_spec(2, width = "5em") |>
+  kableExtra::column_spec(3, width = "7em") |>
+  kableExtra::column_spec(4, width = "9em")
+
+# ============================
+# Conclusão (Questão 1)
+# Quem começa tem vantagem?
+# ============================
+
+wins_p1 <- sum(res$winner == "p1")
+
+p_hat <- wins_p1 / n
+se_hat <- sqrt(p_hat * (1 - p_hat) / n)
+ic_low_hat <- p_hat - 1.96 * se_hat
+ic_high_hat <- p_hat + 1.96 * se_hat
+
+cat(
+  "\n\nConclusão — Questão 1:\n\n", 
+  "Com base em 10.000 simulações do jogo, o Jogador 1 (que inicia a partida)",       "venceu 51,9% dos jogos, enquanto o Jogador 2 venceu 48,1% \n")
+```
+
+------------------------------------------------------------------------
+
+### Q2: Quantas cobras, em média, por jogo?
+
+```{r, echo=FALSE}
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+freq_resumo <- res |>
+  summarise(
+    `Jogos simulados` = n(),
+    `Média cobras/jogo` = mean(snakes_total),
+    `Mediana cobras/jogo` = median(snakes_total),
+    `Q1 cobras` = quantile(snakes_total, 0.25),
+    `Q3 cobras` = quantile(snakes_total, 0.75),
+    `Média escadas/jogo` = mean(ladders_total),
+    `Mediana escadas/jogo` = median(ladders_total),
+    `Q1 escadas` = quantile(ladders_total, 0.25),
+    `Q3 escadas` = quantile(ladders_total, 0.75)
+  ) |>
+  mutate(across(where(is.numeric), ~ round(.x, 2)))
+
+knitr::kable(
+  freq_resumo,
+  caption = "Resumo da frequência de cobras e escadas por jogo (10.000 simulações)",
+  align = "c"
+) |>
+  kableExtra::kable_styling(
+    font_size = 20,
+    full_width = FALSE,
+    position = "center"
+  )
+
+# ----------------------------
+# Conclusão — Questão 2
+# ----------------------------
+cat(
+  "\n\nConclusão — Questão 2:\n\n",
+  "Em média, ocorrem ", freq_resumo$`Média cobras/jogo`,
+  " cobras por jogo.\n",
+  "A mediana é de ", freq_resumo$`Mediana cobras/jogo`,
+  ", indicando que metade dos jogos apresenta até esse número de cobras.\n",
+  "O intervalo interquartil (Q1–Q3) varia de ",
+  freq_resumo$`Q1 cobras`, " a ", freq_resumo$`Q3 cobras`,
+  ", mostrando que a maioria dos jogos concentra-se nesse intervalo.\n",
+  sep = ""
+)
+```
+
+------------------------------------------------------------------------
+
+### Q3: Se toda vez que um jogador cair em uma escada, houver apenas 50% de chance de ele utilizá-la, qual é o número médio de jogadas necessárias para concluir uma partida?
+
+```{r, echo=FALSE}
+library(dplyr)
+library(tibble)
+library(knitr)
+library(kableExtra)
+library(purrr)
+
+# =========================================
+# Q3 — escadas com 50% de chance de uso
+# Objetivo: média de jogadas (rolls) p/ terminar
+# =========================================
+
+move_player_ladder50 <- function(pos, die, board_obj, final_square = 36, p_ladder = 0.5) {
+  new_pos <- pos + die
+
+  # Se chegou/passou do final, termina (não aplica transição)
+  if (new_pos >= final_square) {
+    return(list(pos = new_pos, snakes_hit = 0L, ladders_hit = 0L))
+  }
+
+  k <- as.character(new_pos)
+
+  # Escada: aplica com probabilidade p_ladder
+  if (k %in% names(board_obj$ladders)) {
+    take <- stats::runif(1) < p_ladder
+    if (take) {
+      return(list(
+        pos = unname(board_obj$ladders[[k]]),
+        snakes_hit = 0L,
+        ladders_hit = 1L
+      ))
+    } else {
+      return(list(pos = new_pos, snakes_hit = 0L, ladders_hit = 0L))
+    }
+  }
+
+  # Cobra: aplica sempre
+  if (k %in% names(board_obj$snakes)) {
+    return(list(
+      pos = unname(board_obj$snakes[[k]]),
+      snakes_hit = 1L,
+      ladders_hit = 0L
+    ))
+  }
+
+  # Normal
+  list(pos = new_pos, snakes_hit = 0L, ladders_hit = 0L)
+}
+
+simulate_one_game_ladder50 <- function(board_obj,
+                                       final_square = 36,
+                                       start_p1 = 1,
+                                       start_p2 = 1,
+                                       max_turns = 10000,
+                                       p_ladder = 0.5) {
+  pos <- c(p1 = start_p1, p2 = start_p2)
+  rolls <- 0L
+  turn <- "p1"
+
+  for (i in seq_len(max_turns)) {
+    die <- roll_die()
+    rolls <- rolls + 1L
+
+    mv <- move_player_ladder50(
+      pos = pos[[turn]],
+      die = die,
+      board_obj = board_obj,
+      final_square = final_square,
+      p_ladder = p_ladder
+    )
+
+    pos[[turn]] <- mv$pos
+
+    if (pos[[turn]] >= final_square) {
+      return(tibble(
+        winner = turn,
+        rolls = rolls
+      ))
+    }
+
+    turn <- if (turn == "p1") "p2" else "p1"
+  }
+
+  stop("Jogo não terminou dentro de max_turns. Verifique a lógica.")
+}
+
+simulate_many_games_ladder50 <- function(n,
+                                         board_obj,
+                                         final_square = 36,
+                                         start_p1 = 1,
+                                         start_p2 = 1,
+                                         max_turns = 10000,
+                                         p_ladder = 0.5) {
+  purrr::map_dfr(
+    seq_len(n),
+    ~ simulate_one_game_ladder50(
+      board_obj = board_obj,
+      final_square = final_square,
+      start_p1 = start_p1,
+      start_p2 = start_p2,
+      max_turns = max_turns,
+      p_ladder = p_ladder
+    )
+  )
+}
+
+# ----------------------------
+# Simulação (10.000 jogos)
+# ----------------------------
+set.seed(123)
+res_q3 <- simulate_many_games_ladder50(
+  n = 10000,
+  board_obj = b,
+  final_square = 36,
+  start_p1 = 1,
+  start_p2 = 1,
+  p_ladder = 0.5
+)
+
+stopifnot(nrow(res_q3) == 10000)
+stopifnot(all(res_q3$rolls > 0))
+
+# ----------------------------
+# Tabela resumo (duração do jogo)
+# ----------------------------
+resumo_q3 <- res_q3 |>
+  summarise(
+    `Jogos simulados` = n(),
+    `Média de jogadas` = mean(rolls),
+    `Mediana` = median(rolls),
+    `1º Quartil (Q1)` = quantile(rolls, 0.25),
+    `3º Quartil (Q3)` = quantile(rolls, 0.75)
+  ) |>
+  mutate(across(where(is.numeric), ~ round(.x, 2)))
+
+knitr::kable(
+  resumo_q3,
+  caption = "Q3 — Escadas com 50% de chance: resumo do número de jogadas até o fim do jogo",
+  align = "c"
+) |>
+  kableExtra::kable_styling(
+    font_size = 22,
+    full_width = FALSE,
+    position = "center"
+  )
+
+# ----------------------------
+# Conclusão (Q3)
+# ----------------------------
+media_q3 <- resumo_q3$`Média de jogadas`
+cat(
+  "\n\nConclusão — Questão 3:\n\n",
+  "Quando as escadas são usadas com apenas 50% de chance, ",
+  "o número médio de jogadas para concluir uma partida é ",
+  media_q3,
+  " (estimado a partir de 10.000 simulações).\n",
+  sep = ""
+)
+```
+
+------------------------------------------------------------------------
+
+### Q4: Em qual casa o Jogador 2 deve começar para que as chances de vitória fiquem o mais próximas possível de 50% para cada jogador?
+
+```{r, echo=FALSE}
+library(dplyr)
+library(tibble)
+library(purrr)
+library(scales)
+library(knitr)
+library(kableExtra)
+
+set.seed(123)
+final_square <- 36
+candidatos <- 1:35
+
+# ---------------------------------------------------------
+# Função rápida: estima P(P1 vence) com N jogos (sem IC ainda)
+# ---------------------------------------------------------
+estimate_p1 <- function(start_p2, n_games) {
+  tmp <- simulate_many_games(
+    n = n_games,
+    board_obj = b,
+    final_square = final_square,
+    start_p1 = 1,
+    start_p2 = start_p2
+  )
+  mean(tmp$winner == "p1")
+}
+
+# ---------------------------------------------------------
+# Fase 1 (grossa): poucos jogos por posição, só para ranquear
+# ---------------------------------------------------------
+n1 <- 400
+grid1 <- tibble(start_p2 = candidatos) |>
+  mutate(
+    prob_p1 = purrr::map_dbl(start_p2, ~estimate_p1(.x, n1)),
+    dist_50 = abs(prob_p1 - 0.5)
+  ) |>
+  arrange(dist_50)
+
+top_candidates <- grid1 |> slice(1:5) |> pull(start_p2)
+
+# ---------------------------------------------------------
+# Fase 2 (refino): mais jogos só para os top 5 e calcula IC 95%
+# ---------------------------------------------------------
+n2 <- 3000
+
+run_refined <- function(start_p2) {
+  tmp <- simulate_many_games(
+    n = n2,
+    board_obj = b,
+    final_square = final_square,
+    start_p1 = 1,
+    start_p2 = start_p2
+  )
+
+  n <- nrow(tmp)
+  wins_p1 <- sum(tmp$winner == "p1")
+  p_hat <- wins_p1 / n
+
+  se <- sqrt(p_hat * (1 - p_hat) / n)
+  ic_low <- pmax(0, p_hat - 1.96 * se)
+  ic_high <- pmin(1, p_hat + 1.96 * se)
+
+  tibble(
+    start_p2 = start_p2,
+    jogos = n,
+    prob_p1 = p_hat,
+    ic_low_p1 = ic_low,
+    ic_high_p1 = ic_high,
+    dist_50 = abs(p_hat - 0.5)
+  )
+}
+
+grid2 <- purrr::map_dfr(top_candidates, run_refined) |>
+  arrange(dist_50) |>
+  mutate(
+    prob_p2 = 1 - prob_p1,
+    ic_low_p2 = pmax(0, 1 - ic_high_p1),
+    ic_high_p2 = pmin(1, 1 - ic_low_p1)
+  )
+
+best <- grid2 |> slice(1)
+
+# ---------------------------------------------------------
+# Tabela para o slide (probabilidade do Jogador 2)
+# ---------------------------------------------------------
+tab_q4 <- grid2 |>
+  filter(start_p2 %in% c(7, 4, 6)) |>
+  rename(`Start P2` = start_p2) |>
+  mutate(
+    `Prob. vitória P2` = percent(prob_p2, accuracy = 0.1),
+    `IC 95% (P2)` = paste0(
+      percent(ic_low_p2, accuracy = 0.1),
+      " – ",
+      percent(ic_high_p2, accuracy = 0.1)
+    ),
+    `Distância de 50%` = percent(dist_50, accuracy = 0.1)
+  ) |>
+  arrange(`Start P2`) |>
+  select(
+    `Start P2`,
+    jogos,
+    `Prob. vitória P2`,
+    `IC 95% (P2)`,
+    `Distância de 50%`
+  )
+knitr::kable(
+  tab_q4,
+  caption = "Q4 — Busca grossa (N=400) + refinamento (N=3.000): posição inicial do Jogador 2 para odds mais justas",
+  align = "c"
+) |>
+  kableExtra::kable_styling(
+    font_size = 18,
+    full_width = FALSE,
+    position = "center"
+  )
+
+# ---------------------------------------------------------
+# Conclusão (Q4) — focada no Jogador 2
+# ---------------------------------------------------------
+cat(
+  "\n\nConclusão — Questão 4:\n\n",
+  "Usando uma busca em duas fases (400 jogos por posição e refinamento com 3.000 jogos), ",
+  "a casa inicial do Jogador 2 que deixa o jogo mais próximo de 50/50 é ",
+  best$start_p2,
+  ".\n",
+  "Nesse cenário, o Jogador 2 vence ",
+  percent(best$prob_p2, accuracy = 0.1),
+  " (IC 95%: ",
+  percent(best$ic_low_p2, accuracy = 0.1),
+  " – ",
+  percent(best$ic_high_p2, accuracy = 0.1),
+  ").\n",
+  sep = ""
+)
+
+```
+
+------------------------------------------------------------------------
+
+### Q5: Ao conceder imunidade contra a primeira cobra que o Jogador 2 cair, qual é a probabilidade aproximada de que o Jogador 1 vença?
+
+```{r, echo=FALSE}
+library(dplyr)
+library(tibble)
+library(scales)
+library(knitr)
+library(kableExtra)
+
+set.seed(123)
+
+res_q5 <- simulate_many_games_q5(
+  n = 10000,
+  board_obj = b,
+  final_square = 36,
+  start_p1 = 1,
+  start_p2 = 1
+)
+
+n <- nrow(res_q5)
+wins_p1 <- sum(res_q5$winner == "p1")
+wins_p2 <- sum(res_q5$winner == "p2")
+
+p1_hat <- wins_p1 / n
+p2_hat <- wins_p2 / n
+
+se1 <- sqrt(p1_hat * (1 - p1_hat) / n)
+p1_low <- pmax(0, p1_hat - 1.96 * se1)
+p1_high <- pmin(1, p1_hat + 1.96 * se1)
+
+se2 <- sqrt(p2_hat * (1 - p2_hat) / n)
+p2_low <- pmax(0, p2_hat - 1.96 * se2)
+p2_high <- pmin(1, p2_hat + 1.96 * se2)
+
+tab_q5 <- tibble(
+  Jogador = c("Jogador 1", "Jogador 2"),
+  `Vitórias` = c(wins_p1, wins_p2),
+  `Probabilidade` = c(p1_hat, p2_hat),
+  `IC 95%` = c(
+    paste0(percent(p1_low, 0.1), " – ", percent(p1_high, 0.1)),
+    paste0(percent(p2_low, 0.1), " – ", percent(p2_high, 0.1))
+  )
+) |>
+  mutate(`Probabilidade` = percent(`Probabilidade`, accuracy = 0.1))
+
+knitr::kable(
+  tab_q5,
+  caption = "Q5 — Probabilidade de vitória com imunidade do Jogador 2 à primeira cobra",
+  align = c("l", "c", "c", "c")
+) |>
+  kableExtra::kable_styling(
+    font_size = 20,
+    full_width = FALSE,
+    position = "center"
+  )
+
+cat(
+  "\n\nConclusão — Questão 5:\n\n",
+  "Com a imunidade do Jogador 2 à primeira cobra, a probabilidade de vitória do Jogador 1 passa a ",
+  percent(p1_hat, accuracy = 0.1),
+  " (IC 95%: ",
+  percent(p1_low, accuracy = 0.1),
+  " – ",
+  percent(p1_high, accuracy = 0.1),
+  ").\n",
+  sep = ""
+)
+
+```
+
+# Insights
+
+------------------------------------------------------------------------
+
+### 1 - Vantagem de quem começa
+
+A simulação de 10.000 partidas indicou que o jogador que inicia o jogo apresenta uma leve vantagem estatística.\
+O Jogador 1 venceu aproximadamente 52% das partidas, com intervalo de confiança de 95% acima de 50%, sugerindo que essa vantagem não é atribuída apenas ao acaso.
+
+Isso indica que a ordem de turnos exerce influência no resultado, mesmo em um jogo fortemente aleatório.
+
+------------------------------------------------------------------------
+
+### 2 - Frequência de cobras e escadas
+
+Em média, cada partida apresentou cerca de 3 cobras e 2,5 escadas.\
+As medidas de mediana e quartis indicaram que essas ocorrências são frequentes ao longo das partidas, não sendo eventos raros ou excepcionais.
+
+Isso reforça que cobras e escadas desempenham um papel estrutural no jogo, afetando tanto a duração das partidas quanto a variabilidade dos resultados.
+
+------------------------------------------------------------------------
+
+### 3 - Duração média da partida
+
+O número médio de jogadas necessárias para o término de uma partida foi de aproximadamente 19 jogadas, com mediana de 18 e intervalo interquartil entre 13 e 23 jogadas.
+
+Apesar da aleatoriedade do jogo, a duração das partidas se concentra em um intervalo relativamente estável, indicando previsibilidade no número de jogadas ao longo das simulações.
+
+------------------------------------------------------------------------
+
+### 4 - Impacto de escadas com uso probabilístico (50%)
+
+Ao modificar a regra para que escadas fossem utilizadas apenas com 50% de chance, observou-se um aumento no número médio de jogadas, além de maior dispersão na duração das partidas.
+
+Esse resultado indica que as escadas funcionam como um mecanismo de aceleração do jogo e que a redução de sua efetividade prolonga significativamente as partidas.
+
+------------------------------------------------------------------------
+
+### 5 - Ajuste de justiça do jogo para o Jogador 2
+
+Por meio de uma busca em duas fases, foi identificada a posição inicial do Jogador 2 que torna o jogo mais equilibrado.\
+A casa 7 se mostrou a posição que gera probabilidades de vitória mais próximas de 50% para ambos os jogadores.
+
+Esse resultado evidencia que pequenas alterações nas condições iniciais são suficientes para neutralizar vantagens estruturais do jogo.
+
+# Conclusão
+
+Neste trabalho, foi desenvolvida uma simulação completa do jogo Snakes & Ladders com o objetivo de analisar, de forma estatística, dinâmica do jogo, validações lógicas e impacto de regras sobre o resultado final**.**
+
+A abordagem por simulação se mostrou adequada por permitir a repetição controlada de milhares de partidas, viabilizando a estimação de probabilidades, médias e intervalos de confiança de forma robusta.
