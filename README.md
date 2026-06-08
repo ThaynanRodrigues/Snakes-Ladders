@@ -1,134 +1,134 @@
-# Snakes and Ladders — Simulação Estatística e Análise de Probabilidades em R
+# 🎲 Snakes and Ladders — Statistical Simulation and Probability Analysis in R
 
-Projeto de modelagem e simulação do jogo *Snakes and Ladders*, desenvolvido em R, com foco em validação lógica, análise estatística e geração de insights a partir de dados simulados.
-
----
-
-## Visão Geral
-
-Este projeto tem como objetivo analisar o comportamento do jogo Snakes and Ladders sob diferentes cenários, utilizando simulação computacional para estimar probabilidades, médias e padrões estruturais.
-
-A abordagem combina modelagem matemática, validação de regras e análise exploratória para responder perguntas relevantes sobre dinâmica, aleatoriedade e equilíbrio do jogo.
+A modeling and simulation project of the *Snakes and Ladders* game developed in R, focused on logical validation, statistical analysis, and insight generation from simulated data.
 
 ---
 
-## Objetivos
+## Overview
 
-* Modelar o jogo de forma programática em R
-* Validar a consistência das regras implementadas
-* Simular milhares de partidas para análise estatística
-* Avaliar o impacto de mudanças nas regras do jogo
-* Identificar padrões e gerar insights interpretáveis
+This project aims to analyze the behavior of the Snakes and Ladders game under different scenarios using computational simulation to estimate probabilities, averages, and structural patterns.
+
+The approach combines mathematical modeling, rule validation, and exploratory analysis to answer relevant questions about game dynamics, randomness, and balance.
 
 ---
 
-## Estrutura do Projeto
+## Objectives
 
-```
+* Model the game programmatically in R
+* Validate the consistency of the implemented rules
+* Simulate thousands of games for statistical analysis
+* Evaluate the impact of rule modifications
+* Identify patterns and generate actionable insights
+
+---
+
+## Project Structure
+
+```text
 snakes-ladders/
 │
-├── slides.qmd              # Apresentação final (Quarto / RevealJS)
+├── slides.qmd              # Final presentation (Quarto / RevealJS)
 ├── R/
-│   ├── board.R             # Estrutura do tabuleiro (cobras e escadas)
-│   └── simulate.R          # Funções de simulação
+│   ├── board.R             # Board structure (snakes and ladders)
+│   └── simulate.R          # Simulation functions
 │
-├── figs/                   # Gráficos e imagens
-├── output/                 # Arquivos renderizados
+├── figs/                   # Charts and images
+├── output/                 # Rendered files
 └── README.md
 ```
 
 ---
 
-## Modelagem do Problema
+## Problem Modeling
 
-O tabuleiro foi representado como um sistema de transições entre casas:
+The board was represented as a transition system between squares:
 
-* Escadas: avançam o jogador
-* Cobras: fazem o jogador retroceder
-* Regra de vitória: atingir ou ultrapassar a última casa
+* Ladders: move the player forward
+* Snakes: move the player backward
+* Winning rule: reach or exceed the final square
 
-Toda a lógica foi encapsulada em funções reutilizáveis, permitindo simulação eficiente de múltiplos cenários.
-
----
-
-## Metodologia
-
-O projeto foi estruturado em quatro etapas principais:
-
-1. Modelagem do tabuleiro
-2. Validação das regras do jogo
-3. Simulação de partidas (Monte Carlo)
-4. Análise estatística dos resultados
-
-Foram realizadas milhares de simulações por cenário para garantir estabilidade estatística das estimativas.
+All logic was encapsulated in reusable functions, enabling efficient simulation of multiple scenarios.
 
 ---
 
-## Validações Implementadas
+## Methodology
 
-Antes da análise final, foram realizadas verificações para garantir a confiabilidade do modelo:
+The project was structured into four main stages:
 
-* Distribuição uniforme do dado
-* Aplicação correta de cobras e escadas após o movimento
-* Alternância correta de turnos entre jogadores
-* Tratamento de casos de borda
+1. Board modeling
+2. Rule validation
+3. Game simulation (Monte Carlo)
+4. Statistical analysis of results
 
-  * vitória ao atingir ou ultrapassar a última casa
-  * prevenção de estados inválidos
-  * controle de loops
+Thousands of simulations were performed for each scenario to ensure statistical stability and reliability.
 
 ---
 
-## Perguntas Investigadas
+## Validation Procedures
 
-### Q1. Quem começa tem vantagem?
+Before conducting the final analysis, several validation checks were performed to ensure model reliability:
 
-A simulação indicou que o jogador que inicia a partida possui uma leve vantagem estatística, com probabilidade de vitória acima de 50%.
+* Uniform dice distribution
+* Correct application of snakes and ladders after movement
+* Proper turn alternation between players
+* Edge case handling
 
----
-
-### Q2. Qual a frequência de cobras e escadas?
-
-As ocorrências de cobras e escadas são frequentes ao longo das partidas, mostrando que esses elementos são estruturais no comportamento do jogo.
-
----
-
-### Q3. Qual o impacto de escadas com uso probabilístico (50%)?
-
-Ao reduzir a efetividade das escadas, observou-se:
-
-* aumento no número médio de jogadas
-* maior variabilidade na duração das partidas
-
-Isso evidencia o papel das escadas como mecanismo de aceleração do jogo.
+  * Victory when reaching or exceeding the final square
+  * Prevention of invalid states
+  * Infinite loop control
 
 ---
 
-### Q4. Como tornar o jogo mais equilibrado?
+## Research Questions
 
-Foi realizada uma busca em duas fases para identificar a posição inicial do Jogador 2 que aproxima as probabilidades de vitória de 50%.
+### Q1. Does the First Player Have an Advantage?
 
-Pequenas alterações nas condições iniciais foram suficientes para neutralizar a vantagem do primeiro jogador.
-
----
-
-### Q5. Qual o impacto de imunidade à primeira cobra?
-
-Ao permitir que o Jogador 2 ignore a primeira cobra, observou-se alteração nas probabilidades de vitória, demonstrando sensibilidade do jogo a mudanças nas regras.
+The simulation indicated that the player who starts the game has a slight statistical advantage, with a win probability above 50%.
 
 ---
 
-## Principais Insights
+### Q2. How Frequent Are Snakes and Ladders?
 
-* Existe vantagem estrutural para quem começa
-* A duração das partidas é relativamente estável, apesar da aleatoriedade
-* Cobras e escadas impactam diretamente a dinâmica e variabilidade do jogo
-* Reduzir a efetividade das escadas prolonga significativamente as partidas
-* Pequenas mudanças nas regras podem alterar o equilíbrio do sistema
+Occurrences of snakes and ladders are frequent throughout the games, demonstrating that these elements play a structural role in the game's behavior.
 
 ---
 
-## Tecnologias Utilizadas
+### Q3. What Is the Impact of Probabilistic Ladders (50% Effectiveness)?
+
+When ladder effectiveness was reduced, the following effects were observed:
+
+* Increase in the average number of turns
+* Greater variability in game duration
+
+These findings highlight the role of ladders as a game-acceleration mechanism.
+
+---
+
+### Q4. How Can the Game Be Made More Balanced?
+
+A two-phase search procedure was conducted to identify the optimal starting position for Player 2 that would bring both players' win probabilities closer to 50%.
+
+Small adjustments to the initial conditions were sufficient to neutralize the first-player advantage.
+
+---
+
+### Q5. What Is the Impact of Immunity to the First Snake?
+
+Allowing Player 2 to ignore the first snake encountered altered the win probabilities, demonstrating the game's sensitivity to rule changes.
+
+---
+
+## Key Insights
+
+* There is a structural advantage for the starting player.
+* Game duration remains relatively stable despite randomness.
+* Snakes and ladders directly influence game dynamics and variability.
+* Reducing ladder effectiveness significantly increases game length.
+* Small rule changes can substantially affect game balance.
+
+---
+
+## Technologies Used
 
 * R
 * RStudio
@@ -140,17 +140,18 @@ Ao permitir que o Jogador 2 ignore a primeira cobra, observou-se alteração nas
 
 ---
 
-## Como Executar
+## How to Run
 
-1. Clone o repositório disponível no [GitHub](https://github.com/ThaynanRodrigues/Snakes-Ladders):
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/ThaynanRodrigues/Snakes-Ladders.git
 cd Snakes-Ladders
 ```
-2. Abra o projeto no RStudio
 
-3. Renderize a apresentação:
+### 2. Open the Project in RStudio
+
+### 3. Render the Presentation
 
 ```bash
 quarto render slides.qmd
@@ -158,24 +159,25 @@ quarto render slides.qmd
 
 ---
 
-## Apresentação
+## Presentation
 
-O projeto inclui uma apresentação desenvolvida em Quarto, com foco em:
+The project includes a presentation developed in Quarto, focusing on:
 
-* clareza metodológica
-* validação do raciocínio
-* visualização dos resultados
-* comunicação de insights
-
----
-
-## Autor
-
-Thaynan Rodrigues
+* Methodological clarity
+* Logical validation
+* Data visualization
+* Insight communication
 
 ---
 
-## Contato
+## Author
+
+**Thaynan Rodrigues**
+**Data Analyst | Data Scientist**
+
+---
+
+## Contact
 
 * [LinkedIn](https://www.linkedin.com/in/thaynanrodrigues/)
 * [GitHub](https://github.com/ThaynanRodrigues)
